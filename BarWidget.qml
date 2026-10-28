@@ -13,8 +13,9 @@ import "Strings.js" as Strings
 // chip in the last 10 minutes, and in the urgent colour for the first 2
 // minutes after it starts.
 //
-// Left click toggles the panel, middle click joins the current or next
-// meeting, right click walks the common label formats.
+// By default left click toggles the panel, middle click joins the current
+// or next meeting, right click walks the common label formats. The Bar
+// settings can give each button any of the three.
 BarWidget {
   id: root
   moduleName: "tmn73.calendar"
@@ -47,6 +48,11 @@ BarWidget {
     keepCurrent: setting("nextDuringEvent", "announce") === "keep"
   })
   readonly property bool announcing: !vertical && barState.phase !== "idle"
+  // The bar has only so much room beside the clock: a title past this many
+  // characters ends in an ellipsis.
+  readonly property int announceTitleLimit: Model.announceTitleLimit(setting("announceTitleLimit", 28))
+  // What each mouse button does on the clock: panel, join or format.
+  readonly property var clickActions: Model.clickActions(setting("leftClick", "panel"), setting("middleClick", "join"), setting("rightClick", "format"))
   readonly property bool urgent: barState.phase === "live"
   readonly property bool emphasized: barState.phase === "imminent" || urgent
   readonly property string barMeetingUrl: emphasized ? Model.meetingUrlFor(barState.event) : ""
@@ -97,6 +103,12 @@ BarWidget {
     var url = Model.meetingUrlFor(event || Model.meetingToJoin(visibleEvents, Date.now(), barState.event))
     if (url) Qt.openUrlExternally(url)
     else reminders.notice(Strings.tr(language, "toast.noMeeting"))
+  }
+
+  function runClick(action) {
+    if (action === "join") join(null)
+    else if (action === "format") cycleFormat()
+    else togglePanel()
   }
 
   // ---- Reminders. One widget exists per monitor; the first one sends, and
@@ -233,13 +245,11 @@ BarWidget {
     horizontalMargin: 8.75
     verticalPadding: 8.75
     tooltipText: root.announcing
-      ? Model.text(root.barState.event.title) + "\n" + Strings.tr(root.language, "bar.tooltip")
-      : Strings.tr(root.language, "bar.tooltip")
+      ? Model.text(root.barState.event.title) + "\n" + Model.clickTooltip(root.clickActions, root.language)
+      : Model.clickTooltip(root.clickActions, root.language)
 
     onPressed: function(b) {
-      if (b === Qt.RightButton) root.cycleFormat()
-      else if (b === Qt.MiddleButton) root.join(null)
-      else root.togglePanel()
+      root.runClick(root.clickActions[b === Qt.RightButton ? "right" : b === Qt.MiddleButton ? "middle" : "left"])
     }
 
     Row {
@@ -275,7 +285,7 @@ BarWidget {
 
       BarText {
         visible: root.announcing
-        text: Model.barLabel(root.barState, root.language)
+        text: Model.barLabel(root.barState, root.language, root.announceTitleLimit)
         color: root.emphasized ? root.phaseColor : button.foreground
         opacity: root.emphasized ? 1 : 0.78
         font.family: button.fontFamily
@@ -332,7 +342,7 @@ BarWidget {
 
   // A small filled pill: the Join button and the "+N" badge. Only an
   // interactive chip takes the left click; anything else falls through to
-  // the widget, so the panel, middle and right click work on top of it.
+  // the widget, so the clock's own clicks work on top of it.
   component Chip: Rectangle {
     id: chip
     property alias text: chipLabel.text

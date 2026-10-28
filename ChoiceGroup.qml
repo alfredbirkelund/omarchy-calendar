@@ -17,6 +17,8 @@ Column {
   // [{ value, label }]
   property var options: []
   property string value: ""
+  // Holds the current value: the other options dim and ignore clicks.
+  property bool locked: false
 
   signal chosen(string value)
 
@@ -60,11 +62,15 @@ Column {
         required property var modelData
         text: modelData.label
         selected: modelData.value === root.value
+        // Not `enabled: false`: a button disabled under the pointer never
+        // hears it leave and keeps its hover fill.
+        readonly property bool held: root.locked && !selected
+        opacity: held ? 0.4 : 1
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.bodySmall
-        onClicked: root.chosen(modelData.value)
+        onClicked: if (!held) root.chosen(modelData.value)
       }
     }
   }

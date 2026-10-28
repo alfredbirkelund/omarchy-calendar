@@ -242,3 +242,54 @@ test('the default and alternate formats are presets of their orientation', () =>
   assert.equal(Model.defaultClockFormat(false), 'dddd HH:mm')
   assert.equal(Model.defaultAltClockFormat(true), "dd\nMMM\n'W'ww\n''yy")
 })
+
+test('clickAction keeps a known action and falls back to the button default', () => {
+  assert.equal(Model.clickAction('right', 'join'), 'join')
+  assert.equal(Model.clickAction('left', ' format '), 'format')
+  assert.equal(Model.clickAction('right', 'nonsense'), 'format')
+  assert.equal(Model.clickAction('middle', undefined), 'join')
+  assert.equal(Model.clickAction('left', null), 'panel')
+})
+
+test('clickTooltip words every button in order, in both languages', () => {
+  assert.equal(Model.clickTooltip({}, 'en'),
+    'Click: open the panel · Middle click: join the next meeting · Right click: change the format')
+  assert.equal(Model.clickTooltip({ right: 'join' }, 'en'),
+    'Click: open the panel · Middle click: join the next meeting · Right click: join the next meeting')
+  assert.equal(Model.clickTooltip({ left: 'join', middle: 'panel', right: 'bogus' }, 'pt'),
+    'Clique: entra na próxima reunião · Clique do meio: abre o painel · Clique direito: alterna o formato')
+})
+
+test('clickActions keeps one button on the panel', () => {
+  assert.deepEqual(Model.clickActions('join', 'format', 'panel'), { left: 'join', middle: 'format', right: 'panel' })
+  assert.deepEqual(Model.clickActions('join', 'join', 'format'), { left: 'panel', middle: 'join', right: 'format' })
+  assert.deepEqual(Model.clickActions(undefined, undefined, undefined), { left: 'panel', middle: 'join', right: 'format' })
+})
+
+test('clickLocked holds only the last button on the panel', () => {
+  const one = { left: 'join', middle: 'panel', right: 'format' }
+  assert.equal(Model.clickLocked(one, 'middle'), true)
+  assert.equal(Model.clickLocked(one, 'left'), false)
+  assert.equal(Model.clickLocked({ left: 'panel', middle: 'panel', right: 'join' }, 'left'), false)
+})
+
+test('formatButton names the first button that cycles the format', () => {
+  assert.equal(Model.formatButton({ left: 'panel', middle: 'join', right: 'format' }), 'right')
+  assert.equal(Model.formatButton({ left: 'panel', middle: 'format', right: 'format' }), 'middle')
+  assert.equal(Model.formatButton({ left: 'panel', middle: 'join', right: 'join' }), '')
+})
+
+test('announceTitleLimit keeps 8 to 60 characters and defaults the rest', () => {
+  assert.equal(Model.announceTitleLimit(16), 16)
+  assert.equal(Model.announceTitleLimit('33'), 33)
+  assert.equal(Model.announceTitleLimit(7), 28)
+  assert.equal(Model.announceTitleLimit(61), 28)
+  assert.equal(Model.announceTitleLimit(null), 28)
+  assert.equal(Model.announceTitleLimit('nonsense'), 28)
+})
+
+test('titleLimitChoices adds a hand-written length in its place', () => {
+  assert.deepEqual(Model.titleLimitChoices(16), [12, 16, 20, 28, 40])
+  assert.deepEqual(Model.titleLimitChoices(33), [12, 16, 20, 28, 33, 40])
+  assert.deepEqual(Model.titleLimitChoices(8), [8, 12, 16, 20, 28, 40])
+})

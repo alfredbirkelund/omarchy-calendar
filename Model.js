@@ -233,7 +233,7 @@ function lifeProgressPercent(age, expectancy) {
   return Math.round(lifeProgress(age, expectancy) * 100)
 }
 
-// ---- Bar clock formats. Right-clicking the clock walks these in order and
+// ---- Bar clock formats. The format button walks these in order and
 //      writes the result back to shell.json, so the label the bar shows and
 //      the format the config stores are always the same thing.
 //
@@ -321,10 +321,11 @@ function presetClockFormat(format, presets) {
 
 // What to store when the user's own clock format is set to `typed`:
 // { custom, format }, for the bar's custom key and its format key. The
-// custom format has a key of its own so right click can walk away from it
-// and come back: cycling only ever rewrites the format key. A preset is not
-// kept as a custom format, since the ring already has it. Clearing the field
-// puts a bar that still shows the old custom format back on `defaultFormat`.
+// custom format has a key of its own so the format button can walk away
+// from it and come back: cycling only ever rewrites the format key. A preset
+// is not kept as a custom format, since the ring already has it. Clearing
+// the field puts a bar that still shows the old custom format back on
+// `defaultFormat`.
 function customClockFormatValues(typed, previousCustom, currentFormat, presets, defaultFormat) {
   var format = cleanClockFormat(typed)
   var preset = presetClockFormat(format, presets)
@@ -334,7 +335,7 @@ function customClockFormatValues(typed, previousCustom, currentFormat, presets, 
   return { custom: "", format: showsOld ? defaultFormat : text(currentFormat) }
 }
 
-// The custom format to keep when right click leaves `current`. A format
+// The custom format to keep when the format button leaves `current`. A format
 // written by hand in shell.json, before there was a custom key, would be
 // lost on that click, so it becomes the custom format instead. One already
 // set, a preset or the alternate format is left alone.
@@ -847,6 +848,24 @@ function relativeTime(event, nowMs, lang, long) {
 
 var MAX_ANNOUNCE_TITLE = 28
 
+// The lengths Settings > Bar offers for an announced title.
+var TITLE_LIMIT_CHOICES = [12, 16, 20, 28, 40]
+
+// The announced title length from the settings: 8 to 60 characters, as
+// the manifest allows, and the default for anything else.
+function announceTitleLimit(value) {
+  var chars = Math.round(Number(value))
+  return chars >= 8 && chars <= 60 ? chars : MAX_ANNOUNCE_TITLE
+}
+
+// The lengths Settings offers, with a length written by hand in shell.json
+// added in its place so the page still shows what the bar uses.
+function titleLimitChoices(current) {
+  var chars = announceTitleLimit(current)
+  if (TITLE_LIMIT_CHOICES.indexOf(chars) !== -1) return TITLE_LIMIT_CHOICES.slice()
+  return TITLE_LIMIT_CHOICES.concat([chars]).sort(function(a, b) { return a - b })
+}
+
 // A bar label is a fixed budget of horizontal space shared with every other
 // widget, so a long event title has to give.
 function truncateTitle(title, limit) {
@@ -931,7 +950,60 @@ function barLabel(state, lang, limit) {
   return Strings.tr(lang, "bar.soon", [title, spanText(Math.max(1, Math.ceil(state.countdownMs / MINUTE_MS)), lang)])
 }
 
-// The meeting a middle click on the bar means: the one being announced,
+// ---- Mouse buttons
+
+var CLICK_BUTTONS = ["left", "middle", "right"]
+var CLICK_ACTIONS = ["panel", "join", "format"]
+var DEFAULT_CLICKS = { left: "panel", middle: "join", right: "format" }
+
+// What a mouse button does on the clock: open the panel, join the current
+// or next meeting, or cycle the clock format. Anything else in the settings
+// falls back to the button's default.
+function clickAction(button, value) {
+  var action = text(value).trim()
+  return CLICK_ACTIONS.indexOf(action) === -1 ? DEFAULT_CLICKS[button] : action
+}
+
+// The three buttons' actions from the settings. At least one button opens
+// the panel, since the settings live there: a shell.json that leaves none
+// gives the click back to the panel.
+function clickActions(left, middle, right) {
+  var actions = { left: clickAction("left", left), middle: clickAction("middle", middle), right: clickAction("right", right) }
+  if (actions.left !== "panel" && actions.middle !== "panel" && actions.right !== "panel") actions.left = "panel"
+  return actions
+}
+
+// True for the only button that opens the panel: Settings keeps it there.
+function clickLocked(actions, button) {
+  if (!actions || actions[button] !== "panel") return false
+  for (var i = 0; i < CLICK_BUTTONS.length; i++) {
+    if (CLICK_BUTTONS[i] !== button && actions[CLICK_BUTTONS[i]] === "panel") return false
+  }
+  return true
+}
+
+// The first button that cycles the clock format, or "" when none does.
+function formatButton(actions) {
+  for (var i = 0; i < CLICK_BUTTONS.length; i++) {
+    if (actions && actions[CLICK_BUTTONS[i]] === "format") return CLICK_BUTTONS[i]
+  }
+  return ""
+}
+
+// The tooltip's last line, one phrase per button in order: "Click: open
+// the panel · Middle click: join the next meeting · Right click: change
+// the format".
+function clickTooltip(actions, lang) {
+  var parts = []
+  for (var i = 0; i < CLICK_BUTTONS.length; i++) {
+    var button = CLICK_BUTTONS[i]
+    var action = clickAction(button, actions ? actions[button] : "")
+    parts.push(Strings.tr(lang, "bar.tooltipPart", [Strings.tr(lang, "bar.click." + button), Strings.tr(lang, "bar.action." + action)]))
+  }
+  return parts.join(" · ")
+}
+
+// The meeting the join button means: the one being announced,
 // else one under way (the latest to start), else the next one today.
 function meetingToJoin(events, nowMs, announced) {
   if (announced && meetingUrlFor(announced)) return announced

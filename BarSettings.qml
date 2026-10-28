@@ -17,6 +17,11 @@ Column {
   property string fontFamily: Style.font.family
   property string language: "en"
   property int leadMinutes: 15
+  property int titleLimit: 28
+  // { left, middle, right }, each "panel" | "join" | "format"
+  property var clickActions: ({ left: "panel", middle: "join", right: "format" })
+  // The button that cycles the formats below, "" when none does.
+  readonly property string formatButton: Model.formatButton(clickActions)
   // "untilEnd" | "firstMinutes"
   property string duringEvent: "untilEnd"
   // "announce" | "keep"
@@ -45,13 +50,19 @@ Column {
   readonly property Item field: vertical ? stackField : lineField
   readonly property string typed: Model.cleanClockFormat(field.text)
   readonly property string typedPreset: Model.presetClockFormat(typed, presets)
-  // The formats right click walks, as the bar builds its own list.
+  // The formats the format button walks, as the bar builds its own list.
   readonly property var ring: Model.clockFormatRing(clockFormat, clockAltFormat, presets, customFormat)
   // The preview counts down from 5 minutes, or less with a shorter lead.
   readonly property int previewMinutes: Math.min(5, leadMinutes)
 
   function tr(key, args) {
     return Strings.tr(root.language, key, args)
+  }
+
+  // A hint that names the button cycling the formats, or the same hint
+  // without that sentence when no button does.
+  function clickHint(key) {
+    return formatButton !== "" ? tr(key, [tr("bar.click." + formatButton)]) : tr(key + "NoClick")
   }
 
   function pick(key, value) {
@@ -109,7 +120,7 @@ Column {
 
   Text {
     width: parent.width
-    text: root.tr(root.vertical ? "settings.clockFormatHintVertical" : "settings.clockFormatHint")
+    text: root.clickHint(root.vertical ? "settings.clockFormatHintVertical" : "settings.clockFormatHint")
     color: root.faint
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
@@ -242,7 +253,7 @@ Column {
       x: Style.space(12)
       y: Style.space(8)
       width: parent.width - Style.space(24)
-      text: root.tr("settings.clockFormatBuiltIn")
+      text: root.clickHint("settings.clockFormatBuiltIn")
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -255,17 +266,18 @@ Column {
     spacing: Style.space(8)
 
     KeyCap {
-      id: rightClick
+      id: formatKey
+      visible: root.formatButton !== ""
       foreground: root.foreground
       fontFamily: root.fontFamily
-      text: root.tr("settings.rightClick")
+      text: root.formatButton !== "" ? root.tr("bar.click." + root.formatButton) : ""
     }
 
     // Spaces inside a format do not break, so a line only wraps between two
     // formats.
     Text {
       visible: !root.vertical
-      width: parent.width - rightClick.width - parent.spacing
+      width: parent.width - (formatKey.visible ? formatKey.width + parent.spacing : 0)
       textFormat: Text.PlainText
       text: root.ring.map(function(format) { return root.render(format).replace(/ /g, " ") }).join("  ›  ")
       color: root.faint
@@ -277,7 +289,7 @@ Column {
     // On a vertical bar, each format as the small stack the bar draws.
     Flow {
       visible: root.vertical
-      width: parent.width - rightClick.width - parent.spacing
+      width: parent.width - (formatKey.visible ? formatKey.width + parent.spacing : 0)
       spacing: Style.space(6)
 
       Repeater {
@@ -404,6 +416,23 @@ Column {
     onChosen: function(value) { root.pick("announceLeadMinutes", Number(value)) }
   }
 
+  Gap { visible: titleLimitChoice.visible }
+
+  // Only matters while the bar announces anything.
+  ChoiceGroup {
+    id: titleLimitChoice
+    visible: root.leadMinutes > 0
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    label: root.tr("settings.titleLimit")
+    hint: root.tr("settings.titleLimitHint")
+    options: Model.titleLimitChoices(root.titleLimit).map(function(chars) {
+      return { value: String(chars), label: root.tr("settings.chars", [chars]) }
+    })
+    value: String(root.titleLimit)
+    onChosen: function(value) { root.pick("announceTitleLimit", Number(value)) }
+  }
+
   Gap {}
 
   ChoiceGroup {
@@ -456,5 +485,46 @@ Column {
     hint: root.tr("settings.reminderDetailsHint")
     checked: root.reminderDetails
     onActivated: root.pick("reminderDetails", !root.reminderDetails)
+  }
+
+  Gap {}
+
+  SettingsCaption {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    text: root.tr("settings.mouseButtons")
+  }
+
+  Text {
+    width: parent.width
+    text: root.tr("settings.mouseButtonsHint")
+    color: root.faint
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
+  }
+
+  Repeater {
+    // Rebuilt on each change, so no button keeps the hover of a pick.
+    model: ["left", "middle", "right"].map(function(button) {
+      return { key: button + "Click", button: button, value: root.clickActions[button] }
+    })
+
+    // The only button left on the panel keeps it: without one, the mouse
+    // could not reach these settings again.
+    ChoiceGroup {
+      required property var modelData
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      label: root.tr("bar.click." + modelData.button)
+      locked: Model.clickLocked(root.clickActions, modelData.button)
+      options: [
+        { value: "panel", label: root.tr("settings.actionPanel") },
+        { value: "join", label: root.tr("settings.actionJoin") },
+        { value: "format", label: root.tr("settings.actionFormat") }
+      ]
+      value: modelData.value
+      onChosen: function(value) { root.pick(modelData.key, value) }
+    }
   }
 }

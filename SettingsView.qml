@@ -25,6 +25,9 @@ Item {
 
   // Bar
   property int announceLeadMinutes: 15
+  property int announceTitleLimit: 28
+  // { left, middle, right }, each "panel" | "join" | "format"
+  property var clickActions: ({ left: "panel", middle: "join", right: "format" })
   property string duringEvent: "untilEnd"
   property string nextDuringEvent: "announce"
   property bool reminders: true
@@ -237,6 +240,8 @@ Item {
         fontFamily: root.fontFamily
         language: root.language
         leadMinutes: root.announceLeadMinutes
+        titleLimit: root.announceTitleLimit
+        clickActions: root.clickActions
         duringEvent: root.duringEvent
         nextDuringEvent: root.nextDuringEvent
         reminders: root.reminders
